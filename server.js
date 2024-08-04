@@ -8,7 +8,7 @@ const prismaClient = new PrismaClient();
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
-  cors: { origin: "*", methods: ["GET", "POST", "PUT", "DEL"] },
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
 app.use(cors());
@@ -48,7 +48,7 @@ app.post("/api/joinList", async (req, res) => {
   const { name, password } = req.body;
 
   if (!name || !password) {
-    return res.status(400).json({ error: "Nome e senha são obrigatórios" });
+    return res.status(400).json({ error: "Nome e senha são obrigatórios." });
   }
 
   try {
@@ -57,14 +57,14 @@ app.post("/api/joinList", async (req, res) => {
     });
 
     if (!list) {
-      return res.status(404).json({ error: "Lista não encontrada" });
+      return res.status(404).json({ error: "Lista não encontrada." });
     }
 
     if (list.password !== password) {
-      return res.status(401).json({ error: "Senha incorreta" });
+      return res.status(401).json({ error: "Senha incorreta." });
     }
 
-    res.status(200).json({ success: true, listId: list.id });
+    res.status(200).json({ success: true, list });
   } catch (error) {
     console.error("Erro ao tentar juntar a lista:", error);
     res.status(500).json({ error: "Erro ao tentar juntar a lista" });
@@ -112,9 +112,9 @@ app.get("/api/getListItems", async (req, res) => {
 });
 
 app.post("/api/createListItem", async (req, res) => {
-  const { listId, itemName } = req.body;
+  const { listId, newItemName } = req.body;
 
-  if (!itemName || !newItem) {
+  if (!newItemName || !listId) {
     return res.status(400).json({ error: "listItem e ID é obrigatório" });
   }
 
@@ -127,7 +127,7 @@ app.post("/api/createListItem", async (req, res) => {
     if (!list) return res.status(404).json({ error: "Lista não encontrada." });
 
     const item = await prismaClient.item.create({
-      data: { name: itemName, listId },
+      data: { name: newItemName, listId: listIdNumber },
     });
 
     res.status(201).json(item);
@@ -137,31 +137,143 @@ app.post("/api/createListItem", async (req, res) => {
   }
 });
 
+app.delete("/api/deleteListItem", async (req, res) => {
+  const { listId, itemId } = req.body;
+
+  if (!listId || !itemId) {
+    return res.status(400).json({ error: "listId e itemId são obrigatórios" });
+  }
+
+  const listIdNumber = Number(listId);
+  const itemIdNumber = Number(itemId);
+
+  try {
+    const list = await prismaClient.list.findUnique({
+      where: { id: listIdNumber },
+    });
+
+    if (!list) return res.status(404).json({ error: "Lista não encontrada." });
+
+    const item = await prismaClient.item.findUnique({
+      where: { id: itemIdNumber },
+    });
+
+    if (!item) return res.status(404).json({ error: "Item não encontrado." });
+
+    await prismaClient.item.delete({
+      where: { id: itemIdNumber },
+    });
+
+    res.status(200).json({ message: "Item excluído com sucesso.", success: true, item: item});
+  } catch (error) {
+    console.error("Erro ao excluir item de lista:", error);
+    res.status(500).json({ error: "Erro ao excluir item de lista" });
+  }
+});
+
+app.delete("/api/deleteList", async (req, res) => {
+  const { listId } = req.body;
+
+  if (!listId) {
+    return res.status(400).json({ error: "listId são obrigatórios" });
+  }
+
+  const listIdNumber = Number(listId);
+
+  try {
+    const list = await prismaClient.list.findUnique({
+      where: { id: listIdNumber },
+    });
+    if (!list) return res.status(404).json({ error: "Lista não encontrada." });
+
+    const listItem = await prismaClient.item.findFirst({
+      where: { listId: listIdNumber },
+    });
+    if (listItem) return res.status(406).json({ error: "Delete os itens, antes de deletar lista!" });
+
+    await prismaClient.list.delete({
+      where: { id: listIdNumber },
+    });
+
+    res.status(200).json({ message: "Lista excluída com sucesso.", success: true, list: list});
+  } catch (error) {
+    console.error("Erro ao excluir lista:", error);
+    res.status(500).json({ error: "Erro ao excluir lista" });
+  }
+});
+
+
 io.on("connection", (socket) => {
   console.log("A user connected");
 
-  socket.on("updateList", async (data) => {
-    const { listId, items } = data;
-    await prismaClient.item.deleteMany({
-      where: { listId },
-    });
-    await prismaClient.item.createMany({
-      data: items.map((item) => ({ ...item, listId })),
-    });
-
-    io.to(listId.toString()).emit("listUpdated", items);
+  socket.on("joinList", (listId, callback) => {
+    try {
+      socket.join(listId.toString());
+      console.log(`Socket ${socket.id} joined room ${listId}`);
+      if (callback) {
+        callback({ success: true, message: `Joined room ${listId}` });
+      }
+    } catch (error) {
+      console.error(`Failed to join room ${listId}:`, error);
+      if (callback) {
+        callback({ success: false, message: `Failed to join room ${listId}` });
+      }
+    }
   });
 
-  socket.on("joinList", (listId) => {
-    socket.join(listId.toString());
-  });
+  socket.on(
+    "updateListItem",
+    async ({ itemId, itemName, itemMarked, listId }, callback) => {
+      try {
+        const updatedItem = await prismaClient.item.update({
+          where: { id: itemId },
+          data: { name: itemName, marked: itemMarked },
+        });
+
+        socket.broadcast.to(listId.toString()).emit("itemUpdated", updatedItem);
+
+        if (callback) {
+          callback({
+            success: true,
+            message: "Item updated successfully",
+          });
+        }
+      } catch (error) {
+        console.error("Error updating item:", error);
+        if (callback) {
+          callback({ success: false, message: "Failed to update item" });
+        }
+      }
+    }
+  );
+
+  socket.on(
+    "deleteListItem",
+    async ({ itemId, itemName, itemMarked, listId }, callback) => {
+      try {
+        socket.broadcast.to(listId.toString()).emit("itemDeleted", itemId);
+
+        if (callback) {
+          callback({
+            success: true,
+            message: "Item deleted successfully",
+          });
+        }
+      } catch (error) {
+        console.error("Error share deleting item:", error);
+        if (callback) {
+          callback({ success: false, message: "Failed share deleting item" });
+        }
+      }
+    }
+  );
 
   socket.on("disconnect", () => {
     console.log("A user disconnected");
   });
 });
 
-// Iniciar o servidor
-server.listen(3001, () => {
-  console.log("Servidor rodando na porta 3001");
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+  console.log(`Servidor rodando na porta: ${PORT}`);
 });
