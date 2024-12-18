@@ -34,3 +34,7 @@ Este projeto é um exemplo de uma aplicação back-end utilizando ExpressJS e So
 ## Considerações
 
 Este projeto foi desenvolvido como parte de um teste técnico para demonstrar habilidades em Websocket, com framework SocketIO.
+
+Veja mais projetos como esse:  👇
+
+[acesse meu portfolio](https://c-dev.netlify.app)
