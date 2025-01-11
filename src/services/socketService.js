@@ -14,30 +14,54 @@ const socketService = (io) => {
       } catch (error) {
         console.error(`Failed to join room ${listId}:`, error);
         if (callback) {
-          callback({ success: false, message: `Failed to join room ${listId}` });
+          callback({
+            success: false,
+            message: `Failed to join room ${listId}`,
+          });
         }
       }
     });
 
-    socket.on("updateListItem", async ({ itemId, itemName, itemMarked, listId }, callback) => {
-      try {
-        const updatedItem = await prismaClient.item.update({
-          where: { id: itemId },
-          data: { name: itemName, marked: itemMarked },
-        });
-
-        socket.broadcast.to(listId.toString()).emit("itemUpdated", updatedItem);
-
-        if (callback) {
-          callback({
-            success: true,
-            message: "Item updated successfully",
+    socket.on(
+      "updateListItem",
+      async ({ itemId, itemName, itemMarked, listId }, callback) => {
+        try {
+          const updatedItem = await prismaClient.item.update({
+            where: { id: itemId },
+            data: { name: itemName, marked: itemMarked },
           });
+
+          socket.broadcast
+            .to(listId.toString())
+            .emit("itemUpdated", updatedItem);
+
+          if (callback) {
+            callback({
+              success: true,
+              message: "Item updated successfully",
+            });
+          }
+        } catch (error) {
+          console.error("Error updating item:", error);
+          if (callback) {
+            callback({ success: false, message: "Failed to update item" });
+          }
         }
+      }
+    );
+
+    socket.on("deleteListItem", async ({ itemId, listId }, callback) => {
+      try {
+        socket.broadcast.to(listId.toString()).emit("itemDeleted", { itemId });
+
+        callback({
+          success: true,
+          message: "Item deleted successfully",
+        });
       } catch (error) {
-        console.error("Error updating item:", error);
+        console.error("Error deleting item:", error);
         if (callback) {
-          callback({ success: false, message: "Failed to update item" });
+          callback({ success: false, message: "Failed to delete item" });
         }
       }
     });
