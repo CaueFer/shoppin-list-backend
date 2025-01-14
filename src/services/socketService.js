@@ -24,11 +24,19 @@ const socketService = (io) => {
 
     socket.on(
       "updateListItem",
-      async ({ itemId, itemName, itemMarked, listId }, callback) => {
+      async (
+        { itemId, itemName, itemMarked, listId, itemQty, itemUnitType },
+        callback
+      ) => {
         try {
           const updatedItem = await prismaClient.item.update({
             where: { id: itemId },
-            data: { name: itemName, marked: itemMarked },
+            data: {
+              name: itemName,
+              marked: itemMarked,
+              qty: itemQty,
+              unitType: itemUnitType,
+            },
           });
 
           socket.broadcast

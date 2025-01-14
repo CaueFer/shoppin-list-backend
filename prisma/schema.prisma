@@ -19,13 +19,17 @@ model List {
   items     Item[]
 }
 
-model Item {
-  id       Int     @id @default(autoincrement())
-  name     String
-  listId   Int
-  list     List    @relation(fields: [listId], references: [id])
-  marked   Boolean @default(false)
+enum UnitType {
+  KG
+  UN
 }
 
-
-
+model Item {
+  id        Int       @id @default(autoincrement())
+  name      String
+  listId    Int
+  list      List      @relation(fields: [listId], references: [id])
+  marked    Boolean   @default(false)
+  qty       Float     @default(0.5)
+  unitType  UnitType  @default(UN)
+}
