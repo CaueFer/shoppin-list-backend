@@ -22,6 +22,7 @@ model List {
 enum UnitType {
   KG
   UN
+  CX
 }
 
 model Item {
