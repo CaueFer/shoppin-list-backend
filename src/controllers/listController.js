@@ -1,5 +1,7 @@
-
 const prismaClient = require("../utils/prismaClient");
+//const redisClient = require('../core/redis/redisClient.ts');
+
+const CACHE_EXPIRATION = 60;
 
 const createList = async (req, res) => {
   const { name, password, owner } = req.body;
@@ -58,6 +60,8 @@ const joinList = async (req, res) => {
 };
 
 const getList = async (req, res) => {
+  //const cacheKey = "items_cache";
+
   const { owner } = req.query;
 
   if (!owner) {
@@ -65,9 +69,18 @@ const getList = async (req, res) => {
   }
 
   try {
+    // Verificar se os dados estão no cache
+    // const cachedData = await redisClient.get(cacheKey);
+    // if (cachedData) {
+    //   console.log("Usando o redis");
+    //   return res.status(200).json(JSON.parse(cachedData));
+    // }
+
     const lists = await prismaClient.list.findMany({
       where: { owner },
     });
+
+    //await redisClient.setEx(cacheKey, CACHE_EXPIRATION, JSON.stringify(lists));
 
     res.status(200).json(lists);
   } catch (error) {
@@ -94,13 +107,20 @@ const deleteList = async (req, res) => {
     const listItem = await prismaClient.item.findFirst({
       where: { listId: listIdNumber },
     });
-    if (listItem) return res.status(406).json({ error: "Delete os itens, antes de deletar lista!" });
+    if (listItem)
+      return res
+        .status(406)
+        .json({ error: "Delete os itens, antes de deletar lista!" });
 
     await prismaClient.list.delete({
       where: { id: listIdNumber },
     });
 
-    res.status(200).json({ message: "Lista excluída com sucesso.", success: true, list: list});
+    res.status(200).json({
+      message: "Lista excluída com sucesso.",
+      success: true,
+      list: list,
+    });
   } catch (error) {
     console.error("Erro ao excluir lista:", error);
     res.status(500).json({ error: "Erro ao excluir lista" });
